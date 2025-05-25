@@ -1,0 +1,16 @@
+# GitWorkflow Usage Rules
+
+This project uses GitWorkflow for all git operations.
+For detailed implementation guidelines, refer to the AI Agent Instructions section in GitWorkflow's README.md.
+
+Core Runtime Rules:
+1) Git Operations:
+   - Use .git_workflow/git_workflow.ps1 for ALL git operations
+   - NEVER use raw git commands without explicit human approval
+   - Report unsupported operations to human for official implementation
+
+2) Security:
+   - Follow all security prompts
+   - Never bypass security checks without human approval
+
+For complete instructions, see: https://github.com/ArtyMcLabin/GitWorkflow/README.md#-ai-agent-instructions
