@@ -1,6 +1,6 @@
 # AHK2 Macro Recorder
 
-A fork of [Raeleus's AHK Macro Recorder](https://github.com/raeleus/AHK-Macro-Recorder) updated for AutoHotkey v2, with bug fixes and improvements.
+A fork of [Raeleus's AHK Macro Recorder](https://github.com/raeleus/AHK-Macro-Recorder) with bug fixes, and different controls. (multiple F keys, for different functions)
 
 ## 🎯 About
 
@@ -14,22 +14,15 @@ This is an AutoHotkey v2 script that enables you to record keyboard and mouse ma
 
 ## 🔄 Differences from Raeleus's Version
 
-- Updated for AutoHotkey v2 compatibility
 - Added script enable/disable toggle (F4)
-- Improved mouse coordinate handling
-- Better window title matching
-- Fixed several bugs from the original version
+- Bug Fixes
 - Added more robust error handling
-- **Control Philosophy**: While Raeleus's version follows a minimalistic approach with just F1 for recording/playback, this fork adopts a more feature-rich control scheme (F1-F4) to provide better user control and flexibility
+- **Control Philosophy**: While Raeleus's version follows a minimalistic approach with just F1 for recording/playback, this fork adopts a more traditional control scheme (F1-F4) to provide better stability and slightly more control.
 
 ## ⚠️ Known Issues
 
-While this version fixes many bugs from the original, some issues may still exist:
-- Complex window interactions might not always record perfectly
-- Some special keys might not record as expected
-- Mouse drag operations might need manual adjustment in some cases
-
-I am actively maintaining this fork and will continue to fix bugs as they are discovered.
+While this version fixes some bugs from the original, some issues may still exist:
+- Some recorded scripts fail to execute (when i spot it, i run some fixes. it's artifcats from the ahk1->ahk2 engine migration.
 
 ## 🚀 Installation
 
@@ -72,8 +65,4 @@ The recorded macro will be saved in your temp directory as `~Record1.ahk` by def
 
 ## 🤝 Contributing
 
-Feel free to open issues for bugs or feature requests. Pull requests are welcome!
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
+Feel free to open issues for bugs or feature requests. Pull requests are MUCH more welcome though!
