@@ -142,8 +142,15 @@ Stop() {
       }
 
       For k, v in LogArr
-        s .= "`n" v "`n"
-      s .= "`n`n}`nExitApp()`n`n" ActionKey "::ExitApp()"
+        s .= "    " v "`n"
+      s .= "  }`n"
+      ; Only append finally/ExitApp if not already present
+      if !InStr(s, "finally {", true) && !InStr(s, "ExitApp()", true) {
+        s .= "} finally {`n"
+        s .= "  BlockInput(false)`n"
+        s .= "}`n"
+        s .= "ExitApp()"
+      }
       s := RegExReplace(s, "\R", "`n")
       if (FileExist(LogFile))
         FileDelete(LogFile)
