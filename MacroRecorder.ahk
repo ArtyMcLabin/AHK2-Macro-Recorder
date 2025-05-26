@@ -149,7 +149,7 @@ Stop() {
         s .= "} finally {`n"
         s .= "  BlockInput(false)`n"
         s .= "}`n"
-        s .= "ExitApp()"
+        s .= "ExitApp()`n`n" ActionKey "::ExitApp()"
       }
       s := RegExReplace(s, "\R", "`n")
       if (FileExist(LogFile))
