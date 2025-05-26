@@ -19,7 +19,6 @@ It's based on the work of [Raeleus](https://github.com/raeleus/AHK-Macro-Recorde
 - `F2` - Start/Stop recording macro
 - `F3` - Edit macro in Notepad
 - `F4` - Toggle enable/disable script
-- 
 
 ## 🙏 Acknowledgments
 
@@ -57,7 +56,7 @@ TOGGLE_KEY := "F4"   ; Toggle enable/disable script
 ## 📝 Recording Tips
 
 1. Pressing F1 will also force to stop the recording process
-5. The recorded macro will be saved in your temp directory as `~Record1.ahk` by default. or you can F3 it and save anywhere else.
+2. The recorded macro will be saved in your temp directory as `~Record1.ahk` by default. or you can F3 it and save anywhere else.
 
 ## 🤝 Contributing
 
