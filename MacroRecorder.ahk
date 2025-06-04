@@ -136,6 +136,9 @@ Stop() {
   if (Recording) {
     if (LogArr.Length > 0) {
       UpdateSettings()
+      
+      ; Process LogArr to consolidate key combinations
+      ProcessKeySequences()
 
       s := ";#####SETTINGS#####`n;What is the preferred method of recording mouse coordinates (screen,window,relative)`n;MouseMode=" MouseMode "`n;Record sleep between input actions (true,false)`n;RecordSleep=" RecordSleep "`n"
       
@@ -175,6 +178,46 @@ Stop() {
   Pause(false)
   isPaused := false
   return
+}
+
+; Helper function to process key sequences and consolidate key combinations
+ProcessKeySequences() {
+  global LogArr
+  newLogArr := []
+  
+  i := 1
+  while (i <= LogArr.Length) {
+    currentLine := LogArr[i]
+    
+    ; Look for patterns like "Send("{Alt Down}")" followed by "Send("{Something}")" and then "Send("{Alt Up}")"
+    if (i + 2 <= LogArr.Length) {
+      modDown := RegExMatch(currentLine, 'Send\("{([^}]+) Down}"\)')
+      if (modDown) {
+        modifier := RegExReplace(currentLine, 'Send\("{([^}]+) Down}"\)', "$1")
+        nextLine := LogArr[i + 1]
+        upLine := LogArr[i + 2]
+        
+        ; Check if this is a modifier + key + modifier up pattern
+        if (RegExMatch(upLine, 'Send\("{' modifier ' Up}"\)')) {
+          ; This is a modifier key combination
+          if (RegExMatch(nextLine, 'Send\("{Blind}([^}]*)"\)')) {
+            key := RegExReplace(nextLine, 'Send\("{Blind}([^}]*)"\)', "$1")
+            ; Create a proper key combination
+            newLogArr.Push("Send(`"{" modifier " down}" key "{" modifier " up}`")")
+            i += 3  ; Skip the next two lines as we've processed them
+            continue
+          }
+        }
+      }
+    }
+    
+    ; Add the current line if it wasn't part of a key combination
+    newLogArr.Push(currentLine)
+    i++
+  }
+  
+  ; Replace the original LogArr with our processed version
+  LogArr := newLogArr
 }
 
 PlayKeyAction() {
@@ -271,12 +314,24 @@ LogKey(HotkeyName) {
 
 LogKey_Control(key) {
   global LogArr
+  static downKeys := Map()
   k := InStr(key, "Win") ? key : SubStr(key, 2)
+  
+  ; Record the key as being pressed
+  downKeys[k] := true
+  
+  ; Log the key down event
   Log("{" k " Down}", 1)
+  
   Critical("Off")
   ErrorLevel := !KeyWait(key)
   Critical()
+  
+  ; Log the key up event
   Log("{" k " Up}", 1)
+  
+  ; Remove the key from pressed keys
+  downKeys.Delete(k)
 }
 
 LogKey_Mouse(key) {
@@ -373,8 +428,17 @@ Log(str := "", Keyboard := false) {
   r := i = 0 ? "" : LogArr[i]
   
   if (Keyboard) {
-    if (InStr(r, "Send") && Delay < 1000) {
-      ; Instead of appending to the previous Send command, keep track of keystrokes in buffer
+    ; Special handling for modifier keys and key combinations
+    if (InStr(str, " Down}") || InStr(str, " Up}")) {
+      ; This is a modifier key event, handle it directly
+      if (Delay > 200) 
+        LogArr.Push((RecordSleep == "false" ? ";" : "") "Sleep(" (Delay // 2) ")")
+      LogArr.Push("Send(`"" . str . "`")")
+      return
+    }
+    
+    if (InStr(r, "Send") && Delay < 1000 && !InStr(r, " Down}") && !InStr(r, " Up}")) {
+      ; Continue normal keyboard sequence for regular keys
       KeyboardBuffer .= str
       ; Update the existing Send command with the complete buffer
       LogArr[i] := "Send(`"{Blind}" . KeyboardBuffer . "`")"
