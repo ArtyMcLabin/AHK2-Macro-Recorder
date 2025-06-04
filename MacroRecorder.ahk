@@ -363,7 +363,7 @@ LogWindow() {
 
 Log(str := "", Keyboard := false) {
   global LogArr, RecordSleep
-  static LastTime := 0
+  static LastTime := 0, KeyboardBuffer := ""
   t := A_TickCount
   Delay := (LastTime ? t - LastTime : 0)
   LastTime := t
@@ -371,12 +371,28 @@ Log(str := "", Keyboard := false) {
     return
   i := LogArr.Length
   r := i = 0 ? "" : LogArr[i]
-  if (Keyboard && InStr(r, "Send") && Delay < 1000) {
-    LogArr[i] := SubStr(r, 1, -1) . str . '"'
+  
+  if (Keyboard) {
+    if (InStr(r, "Send") && Delay < 1000) {
+      ; Instead of appending to the previous Send command, keep track of keystrokes in buffer
+      KeyboardBuffer .= str
+      ; Update the existing Send command with the complete buffer
+      LogArr[i] := "Send(`"{Blind}" . KeyboardBuffer . "`")"
+    } else {
+      ; Start a new keyboard buffer
+      KeyboardBuffer := str
+      ; Create a new Send command
+      if (Delay > 200) 
+        LogArr.Push((RecordSleep == "false" ? ";" : "") "Sleep(" (Delay // 2) ")")
+      LogArr.Push("Send(`"{Blind}" . KeyboardBuffer . "`")")
+    }
     return
   }
 
+  ; For non-keyboard actions, reset the keyboard buffer
+  KeyboardBuffer := ""
+  
   if (Delay > 200) 
     LogArr.Push((RecordSleep == "false" ? ";" : "") "Sleep(" (Delay // 2) ")")
-  LogArr.Push(Keyboard ? "Send(`"{Blind}" . str . "`")" : str)
+  LogArr.Push(str)
 }
