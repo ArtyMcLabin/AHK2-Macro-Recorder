@@ -147,14 +147,14 @@ Stop() {
 
       For k, v in LogArr
         s .= "    " v "`n"
-      s .= "  }`n"
-      ; Only append finally/ExitApp if not already present
-      if !InStr(s, "finally {", true) && !InStr(s, "ExitApp()", true) {
-        s .= "} finally {`n"
-        s .= "  BlockInput(false)`n"
-        s .= "}`n"
-        s .= "ExitApp()`n`n" ActionKey "::ExitApp()"
-      }
+      
+      ; Remove the extra closing brace and add the finally block
+      s .= "}`n" ; Close the Loop(1) block
+      s .= "finally {`n"
+      s .= "  BlockInput(false)`n"
+      s .= "}`n"
+      s .= "ExitApp()`n`n" ActionKey "::ExitApp()"
+      
       s := RegExReplace(s, "\R", "`n")
       if (FileExist(LogFile))
         FileDelete(LogFile)
