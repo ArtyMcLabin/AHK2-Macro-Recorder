@@ -137,7 +137,12 @@ Stop() {
     if (LogArr.Length > 0) {
       UpdateSettings()
 
-      s := ";#####SETTINGS#####`n;What is the preferred method of recording mouse coordinates (screen,window,relative)`n;MouseMode=" MouseMode "`n;Record sleep between input actions (true,false)`n;RecordSleep=" RecordSleep "`nLoop(1)`n{`n`nStartingValue := 0`ni := RegRead(`"HKEY_CURRENT_USER\SOFTWARE\`" A_ScriptName, `"i`", StartingValue)`nRegWrite(i + 1, `"REG_DWORD`", `"HKEY_CURRENT_USER\SOFTWARE\`" A_ScriptName, `"i`")`n`nSetKeyDelay(30)`nSendMode(`"Event`")`nSetTitleMatchMode(2)"
+      s := ";#####SETTINGS#####`n;What is the preferred method of recording mouse coordinates (screen,window,relative)`n;MouseMode=" MouseMode "`n;Record sleep between input actions (true,false)`n;RecordSleep=" RecordSleep "`n"
+      
+      s .= "try {`n"
+      s .= "Loop(1)`n{`n`n"
+      
+      s .= "StartingValue := 0`ni := RegRead(`"HKEY_CURRENT_USER\SOFTWARE\`" A_ScriptName, `"i`", StartingValue)`nRegWrite(i + 1, `"REG_DWORD`", `"HKEY_CURRENT_USER\SOFTWARE\`" A_ScriptName, `"i`")`n`nSetKeyDelay(30)`nSendMode(`"Event`")`nSetTitleMatchMode(2)"
 
       if (MouseMode == "window") {
         s .= "`n;CoordMode(`"Mouse`", `"Screen`")`nCoordMode(`"Mouse`", `"Window`")`n"
@@ -148,9 +153,8 @@ Stop() {
       For k, v in LogArr
         s .= "    " v "`n"
       
-      ; Remove the extra closing brace and add the finally block
-      s .= "}`n" ; Close the Loop(1) block
-      s .= "finally {`n"
+      s .= "}`n"
+      s .= "} finally {`n"
       s .= "  BlockInput(false)`n"
       s .= "}`n"
       s .= "ExitApp()`n`n" ActionKey "::ExitApp()"
