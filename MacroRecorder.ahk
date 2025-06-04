@@ -6,7 +6,7 @@ CoordMode("ToolTip")
 SetTitleMatchMode(2)
 DetectHiddenWindows(true)
 ;-----------------------------------
-;  Macro Recorder v3.0 by Arty McLabin
+;  Macro Recorder v3.1 by Arty McLabin
 ;  Based on v2 by Raeleus (https://github.com/raeleus/AHK-Macro-Recorder). Raeleus based his on v2.1 of FeiYue
 ;
 ;  F1 = Play macro
@@ -21,7 +21,7 @@ PLAY_KEY   := "F1"   ; Play macro
 RECORD_KEY := "F2"   ; Record macro
 EDIT_KEY   := "F3"   ; Edit macro in Notepad
 TOGGLE_KEY := "F4"   ; Toggle enable/disable script
-scriptEnabled := true
+scriptEnabled := false  ; Start disabled by default
 
 if (A_Args.Length < 1) {
   A_Args.Push("~Record1.ahk")
@@ -37,10 +37,10 @@ Recording := false
 Playing := false
 ActionKey := A_Args[2]
 
-Hotkey(PLAY_KEY,   (*) => PlayKeyAction())
-Hotkey(RECORD_KEY, (*) => RecordKeyAction())
-Hotkey(EDIT_KEY,   (*) => EditKeyAction())
-Hotkey(TOGGLE_KEY, (*) => ToggleScript())
+Hotkey(PLAY_KEY,   (*) => PlayKeyAction(), "Off")  ; Start with hotkeys disabled
+Hotkey(RECORD_KEY, (*) => RecordKeyAction(), "Off")
+Hotkey(EDIT_KEY,   (*) => EditKeyAction(), "Off")
+Hotkey(TOGGLE_KEY, (*) => ToggleScript())  ; Only toggle hotkey is active
 
 ShowTip(s := "", pos := "y35", color := "Red|00FFFF") {
   static bak := "", idx := 0, ShowTip := Gui(), RecordingControl
@@ -68,6 +68,10 @@ ShowTip(s := "", pos := "y35", color := "Red|00FFFF") {
     return
   }
 }
+
+; Show initial disabled message
+ShowTip("Macro Recorder DISABLED", "y35", "Gray|888888")
+SetTimer(() => ShowTip(), -2000)  ; Hide after 2 seconds
 
 ;============ Hotkey =============
 
@@ -370,5 +374,5 @@ Log(str := "", Keyboard := false) {
 
   if (Delay > 200) 
     LogArr.Push((RecordSleep == "false" ? ";" : "") "Sleep(" (Delay // 2) ")")
-  LogArr.Push(Keyboard ? "Send {Blind}" . str . '"' : str)
+  LogArr.Push(Keyboard ? "Send(`"{Blind}" . str . "`")" : str)
 }
