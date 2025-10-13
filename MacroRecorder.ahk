@@ -315,23 +315,24 @@ LogKey(HotkeyName) {
 LogKey_Control(key) {
   global LogArr
   static downKeys := Map()
+  originalKey := key  ; Store original before remapping
   k := InStr(key, "Win") ? key : SubStr(key, 2)
-  
+
   ; Record the key as being pressed
-  downKeys[k] := true
-  
+  downKeys[originalKey] := true
+
   ; Log the key down event
   Log("{" k " Down}", 1)
-  
+
   Critical("Off")
   ErrorLevel := !KeyWait(key)
   Critical()
-  
+
   ; Log the key up event
   Log("{" k " Up}", 1)
-  
+
   ; Remove the key from pressed keys
-  downKeys.Delete(k)
+  downKeys.Delete(originalKey)
 }
 
 LogKey_Mouse(key) {
@@ -394,8 +395,10 @@ LogWindow() {
   global oldid, LogArr, MouseMode
   static oldtitle
   id := WinExist("A")
-  title := WinGetTitle()
-  class := WinGetClass()
+  if (!id)
+    return
+  title := WinGetTitle(id)
+  class := WinGetClass(id)
   if (title = "" && class = "")
     return
   if (id = oldid && title = oldtitle)
