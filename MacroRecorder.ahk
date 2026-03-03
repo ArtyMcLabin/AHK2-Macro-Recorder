@@ -13,8 +13,10 @@ DetectHiddenWindows(true)
 ;  F2 = Record macro
 ;  F3 = Edit macro in Notepad
 ;  F4 = Toggle enable/disable script
+;  F6 = Play macro in a loop (F5 is commonly reserved by other apps, so F6 is the default - customize below)
+;  F7 = Toggle idle replay on/off
 ;
-;  To customize hotkeys, change the values of PLAY_KEY, RECORD_KEY, and EDIT_KEY below.
+;  To customize hotkeys, change the values below.
 ;-----------------------------------
 
 PLAY_KEY   := "F1"   ; Play macro
@@ -22,9 +24,9 @@ RECORD_KEY := "F2"   ; Record macro
 EDIT_KEY   := "F3"   ; Edit macro in Notepad
 TOGGLE_KEY := "F4"   ; Toggle enable/disable script
 scriptEnabled := false  ; Start disabled by default
-LOOP_KEY   := "F5"   ; Play macro indefinitely
+LOOP_KEY   := "F6"   ; Play macro indefinitely (F5 is too commonly reserved by other apps)
 LOOP_DELAY := 1000   ; Delay in milliseconds between loops
-IDLE_TOGGLE_KEY := "F6"   ; Toggle idle replay on/off
+IDLE_TOGGLE_KEY := "F7"   ; Toggle idle replay on/off
 IDLE_TIMEOUT    := 5000   ; Inactive time in milliseconds (5000 = 5 seconds)
 idleReplayEnabled := false ; Starts disabled
 
@@ -296,16 +298,16 @@ ToggleScript() {
         Hotkey(PLAY_KEY,   "On")
         Hotkey(RECORD_KEY, "On")
         Hotkey(EDIT_KEY,   "On")
-        Hotkey(LOOP_KEY,   "On") ;
-        Hotkey(IDLE_TOGGLE_KEY, "On") ;
+        Hotkey(LOOP_KEY,   "On")
+        Hotkey(IDLE_TOGGLE_KEY, "On")
         ShowTip("Macro Recorder ENABLED", "y35", "Green|00FF00")
         SetTimer(() => ShowTip(), -500)
     } else {
         Hotkey(PLAY_KEY,   "Off")
         Hotkey(RECORD_KEY, "Off")
         Hotkey(EDIT_KEY,   "Off")
-        Hotkey(LOOP_KEY,   "Off") ; 
-        Hotkey(IDLE_TOGGLE_KEY, "Off") ;
+        Hotkey(LOOP_KEY,   "Off")
+        Hotkey(IDLE_TOGGLE_KEY, "Off")
         ShowTip("Macro Recorder DISABLED", "y35", "Gray|888888")
         SetTimer(() => ShowTip(), -500)
     }
