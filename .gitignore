@@ -1,1 +1,4 @@
-desktop.ini 
+desktop.ini
+*.exe
+~Record*.ahk
+*.bak
