@@ -62,6 +62,10 @@ IDLE_TOGGLE_KEY := "F7"  ; Toggle idle replay on/off
 1. Pressing F1 will also force to stop the recording process
 2. The recorded macro will be saved in your temp directory as `~Record1.ahk` by default. or you can F3 it and save anywhere else.
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=ArtyMcLabin/AHK2-Macro-Recorder&type=Date)](https://star-history.com/#ArtyMcLabin/AHK2-Macro-Recorder&Date)
+
 ## 🤝 Contributing
 
 Feel free to open issues for bugs or feature requests. Pull requests are MUCH more welcome though!
