@@ -18,11 +18,13 @@ DetectHiddenWindows(true)
 ;  To customize hotkeys, change the values below.
 ;-----------------------------------
 
+DllCall("SetThreadDpiAwarenessContext", "ptr", -3, "ptr")  ; Fix mouse coords on scaled monitors (>100%)
+
 PLAY_KEY   := "F1"   ; Play macro
 RECORD_KEY := "F2"   ; Record macro
 EDIT_KEY   := "F3"   ; Edit macro in Notepad
 TOGGLE_KEY := "F4"   ; Toggle enable/disable script
-scriptEnabled := false  ; Start disabled by default
+scriptEnabled := true  ; Start enabled by default
 LOOP_KEY   := "F6"   ; Play macro indefinitely (F5 is too commonly reserved by other apps)
 LOOP_DELAY := 1000   ; Delay in milliseconds between loops
 loopPID := 0  ; Track loop child process
@@ -41,11 +43,17 @@ Recording := false
 Playing := false
 ActionKey := A_Args[2]
 
-Hotkey(PLAY_KEY,   (*) => PlayKeyAction(), "Off")  ; Start with hotkeys disabled
-Hotkey(RECORD_KEY, (*) => RecordKeyAction(), "Off")
-Hotkey(EDIT_KEY,   (*) => EditKeyAction(), "Off")
-Hotkey(LOOP_KEY,   (*) => LoopKeyAction(), "Off")
-Hotkey(TOGGLE_KEY, (*) => ToggleScript())  ; Only toggle hotkey is active
+Hotkey(PLAY_KEY,   (*) => PlayKeyAction())
+Hotkey(RECORD_KEY, (*) => RecordKeyAction())
+Hotkey(EDIT_KEY,   (*) => EditKeyAction())
+Hotkey(LOOP_KEY,   (*) => LoopKeyAction())
+Hotkey(TOGGLE_KEY, (*) => ToggleScript())
+
+ReleaseModifiers() {
+  ; Release any physically held modifier keys to prevent them from
+  ; bleeding into macro playback (fixes issue with +F1, ^F1, !F1 hotkeys)
+  Send("{Shift up}{Ctrl up}{Alt up}{LWin up}{RWin up}")
+}
 
 StopLoop() {
   global loopPID
@@ -221,6 +229,7 @@ LoopKeyAction() {
     FileAppend("; Empty macro file created by script`nExitApp()`n", LogFile, "UTF-16")
   }
 
+  ReleaseModifiers()
   if (A_IsCompiled) {
     Run(ahk " /script /restart `"" LogFile "`" loop", , , &pid)
   } else {
@@ -289,6 +298,7 @@ PlayKeyAction() {
     FileAppend("; Empty macro file created by script\nExitApp()\n", LogFile, "UTF-16")
   }
 
+  ReleaseModifiers()
   if (A_IsCompiled) {
     Run(ahk " /script /restart `"" LogFile "`"")
   } else {
