@@ -29,6 +29,7 @@ LOOP_DELAY := 1000   ; Delay in milliseconds between loops
 IDLE_TOGGLE_KEY := "F7"   ; Toggle idle replay on/off
 IDLE_TIMEOUT    := 5000   ; Inactive time in milliseconds (5000 = 5 seconds)
 idleReplayEnabled := false ; Starts disabled
+loopPID := 0  ; Track loop child process
 
 if (A_Args.Length < 1) {
   A_Args.Push("~Record1.ahk")
@@ -78,16 +79,19 @@ ShowTip(s := "", pos := "y35", color := "Red|00FFFF") {
   }
 }
 
-; Show initial disabled message
-ShowTip("Macro Recorder DISABLED", "y35", "Gray|888888")
-SetTimer(() => ShowTip(), -2000)  ; Hide after 2 seconds
+; Script starts silently — label only shown on user toggle (F4)
 
 ;============ Hotkey =============
 
 RecordKeyAction() {
+  global loopPID
   if (Recording) {
     Stop()
     return
+  }
+  if (loopPID) {
+    try ProcessClose(loopPID)
+    loopPID := 0
   }
   #SuspendExempt
   RecordScreen()
@@ -194,7 +198,18 @@ Stop() {
 }
 
 LoopKeyAction() {
+  global loopPID
   #SuspendExempt
+
+  ; If loop is running, stop it
+  if (loopPID) {
+    try ProcessClose(loopPID)
+    loopPID := 0
+    ShowTip("LOOP Stopped", "y35", "Red|FF4444")
+    SetTimer(() => ShowTip(), -2000)
+    return
+  }
+
   if (Recording || Playing)
     Stop()
   ahk := A_AhkPath
@@ -210,10 +225,13 @@ LoopKeyAction() {
   }
 
   if (A_IsCompiled) {
-    Run(ahk " /script /restart `"" LogFile "`" loop")
+    Run(ahk " /script /restart `"" LogFile "`" loop", , , &pid)
   } else {
-    Run(ahk " /restart `"" LogFile "`" loop")
+    Run(ahk " /restart `"" LogFile "`" loop", , , &pid)
   }
+  loopPID := pid
+  ShowTip("LOOP Started", "y35", "Green|00FF00")
+  SetTimer(() => ShowTip(), -2000)
   return
 }
 
@@ -258,7 +276,14 @@ ProcessKeySequences() {
 }
 
 PlayKeyAction() {
+  global loopPID
   #SuspendExempt
+  if (loopPID) {
+    try ProcessClose(loopPID)
+    loopPID := 0
+    ShowTip("LOOP Stopped", "y35", "Red|FF4444")
+    SetTimer(() => ShowTip(), -2000)
+  }
   if (Recording || Playing)
     Stop()
   ahk := A_AhkPath
