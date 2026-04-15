@@ -20,7 +20,8 @@ It's based on the work of [Raeleus](https://github.com/raeleus/AHK-Macro-Recorde
 - `F3` - Edit macro in Notepad
 - `F4` - Toggle enable/disable script
 - `F6` - Play macro in a loop (F5 skipped — too commonly reserved by other apps)
-- `F7` - Toggle idle replay (auto-replays macro after inactivity timeout)
+
+> **Looking for the anti-idle feature?** The `with-f7-anti-idle-feature` branch includes an extra `F7` hotkey that auto-replays your macro after a configurable inactivity timeout. Useful as an anti-AFK tool.
 
 ## 🙏 Acknowledgments
 
@@ -32,7 +33,7 @@ It's based on the work of [Raeleus](https://github.com/raeleus/AHK-Macro-Recorde
 
 - Added F4 to enable/disable the other keys (F1-F3) so you can use them for other stuff
 - More stable (less errors)
-- **Control Philosophy**: While Raeleus's version follows a minimalistic approach with just F1 for recording/playback, this fork adopts a more traditional control scheme (F1-F4, F6-F7) to provide better stability and more control.
+- **Control Philosophy**: While Raeleus's version follows a minimalistic approach with just F1 for recording/playback, this fork adopts a more traditional control scheme (F1-F4, F6) to provide better stability and more control.
 
 ## ⚠️ Known Issues
 
@@ -54,7 +55,6 @@ RECORD_KEY     := "F2"   ; Record macro
 EDIT_KEY       := "F3"   ; Edit macro in Notepad
 TOGGLE_KEY     := "F4"   ; Toggle enable/disable script
 LOOP_KEY       := "F6"   ; Play macro in a loop
-IDLE_TOGGLE_KEY := "F7"  ; Toggle idle replay on/off
 ```
 
 ## 📝 Recording Tips

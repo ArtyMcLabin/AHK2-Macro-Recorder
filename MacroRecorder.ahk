@@ -14,7 +14,6 @@ DetectHiddenWindows(true)
 ;  F3 = Edit macro in Notepad
 ;  F4 = Toggle enable/disable script
 ;  F6 = Play macro in a loop (F5 is commonly reserved by other apps, so F6 is the default - customize below)
-;  F7 = Toggle idle replay on/off
 ;
 ;  To customize hotkeys, change the values below.
 ;-----------------------------------
@@ -26,9 +25,6 @@ TOGGLE_KEY := "F4"   ; Toggle enable/disable script
 scriptEnabled := false  ; Start disabled by default
 LOOP_KEY   := "F6"   ; Play macro indefinitely (F5 is too commonly reserved by other apps)
 LOOP_DELAY := 1000   ; Delay in milliseconds between loops
-IDLE_TOGGLE_KEY := "F7"   ; Toggle idle replay on/off
-IDLE_TIMEOUT    := 5000   ; Inactive time in milliseconds (5000 = 5 seconds)
-idleReplayEnabled := false ; Starts disabled
 loopPID := 0  ; Track loop child process
 
 if (A_Args.Length < 1) {
@@ -50,7 +46,17 @@ Hotkey(RECORD_KEY, (*) => RecordKeyAction(), "Off")
 Hotkey(EDIT_KEY,   (*) => EditKeyAction(), "Off")
 Hotkey(LOOP_KEY,   (*) => LoopKeyAction(), "Off")
 Hotkey(TOGGLE_KEY, (*) => ToggleScript())  ; Only toggle hotkey is active
-Hotkey(IDLE_TOGGLE_KEY, (*) => ToggleIdleReplay(), "Off")
+
+StopLoop() {
+  global loopPID
+  if (!loopPID)
+    return false
+  try ProcessClose(loopPID)
+  loopPID := 0
+  ShowTip("LOOP Stopped", "y35", "Red|FF4444")
+  SetTimer(() => ShowTip(), -2000)
+  return true
+}
 
 ShowTip(s := "", pos := "y35", color := "Red|00FFFF") {
   static bak := "", idx := 0, ShowTip := Gui(), RecordingControl
@@ -84,15 +90,11 @@ ShowTip(s := "", pos := "y35", color := "Red|00FFFF") {
 ;============ Hotkey =============
 
 RecordKeyAction() {
-  global loopPID
   if (Recording) {
     Stop()
     return
   }
-  if (loopPID) {
-    try ProcessClose(loopPID)
-    loopPID := 0
-  }
+  StopLoop()
   #SuspendExempt
   RecordScreen()
 }
@@ -202,13 +204,8 @@ LoopKeyAction() {
   #SuspendExempt
 
   ; If loop is running, stop it
-  if (loopPID) {
-    try ProcessClose(loopPID)
-    loopPID := 0
-    ShowTip("LOOP Stopped", "y35", "Red|FF4444")
-    SetTimer(() => ShowTip(), -2000)
+  if (StopLoop())
     return
-  }
 
   if (Recording || Playing)
     Stop()
@@ -276,14 +273,8 @@ ProcessKeySequences() {
 }
 
 PlayKeyAction() {
-  global loopPID
   #SuspendExempt
-  if (loopPID) {
-    try ProcessClose(loopPID)
-    loopPID := 0
-    ShowTip("LOOP Stopped", "y35", "Red|FF4444")
-    SetTimer(() => ShowTip(), -2000)
-  }
+  StopLoop()
   if (Recording || Playing)
     Stop()
   ahk := A_AhkPath
@@ -308,6 +299,7 @@ PlayKeyAction() {
 
 EditKeyAction() {
   #SuspendExempt
+  StopLoop()
   ; Ensure macro file exists
   if (!FileExist(LogFile)) {
     FileAppend("; Empty macro file created by script\nExitApp()\n", LogFile, "UTF-16")
@@ -324,7 +316,6 @@ ToggleScript() {
         Hotkey(RECORD_KEY, "On")
         Hotkey(EDIT_KEY,   "On")
         Hotkey(LOOP_KEY,   "On")
-        Hotkey(IDLE_TOGGLE_KEY, "On")
         ShowTip("Macro Recorder ENABLED", "y35", "Green|00FF00")
         SetTimer(() => ShowTip(), -500)
     } else {
@@ -332,7 +323,6 @@ ToggleScript() {
         Hotkey(RECORD_KEY, "Off")
         Hotkey(EDIT_KEY,   "Off")
         Hotkey(LOOP_KEY,   "Off")
-        Hotkey(IDLE_TOGGLE_KEY, "Off")
         ShowTip("Macro Recorder DISABLED", "y35", "Gray|888888")
         SetTimer(() => ShowTip(), -500)
     }
@@ -530,34 +520,3 @@ Log(str := "", Keyboard := false) {
   LogArr.Push(str)
 }
 
-ToggleIdleReplay() {
-    global idleReplayEnabled, IDLE_TIMEOUT
-    idleReplayEnabled := !idleReplayEnabled
-    
-    if (idleReplayEnabled) {
-        SetTimer(CheckIdleTime, 1000) ; Check the idle time every 1 second
-        ShowTip("Idle Replay ENABLED (" IDLE_TIMEOUT / 1000 "s)", "y35", "Green|00FF00")
-        SetTimer(() => ShowTip(), -1500)
-    } else {
-        SetTimer(CheckIdleTime, 0) ; Stop the timer
-        ShowTip("Idle Replay DISABLED", "y35", "Gray|888888")
-        SetTimer(() => ShowTip(), -1500)
-    }
-}
-
-CheckIdleTime() {
-    global IDLE_TIMEOUT, Recording, idleReplayEnabled
-    
-    ; Do nothing if we are currently recording or if the feature is turned off
-    if (Recording || !idleReplayEnabled)
-        return
-
-    ; A_TimeIdle measures time since the last physical OR artificial input
-    if (A_TimeIdle >= IDLE_TIMEOUT) {
-        PlayKeyAction()
-        
-        ; Pause this thread for 1 second to give the macro process time 
-        ; to start and send its first input (which resets A_TimeIdle back to 0)
-        Sleep(1000)
-    }
-}
