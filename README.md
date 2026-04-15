@@ -1,5 +1,7 @@
 # AHK2 Macro Recorder
 
+> **This is the `with-f7-anti-idle-feature` branch.** It includes everything from `master` plus an extra **F7** hotkey that auto-replays your macro after a configurable inactivity timeout (default: 5 seconds). Useful as an anti-AFK tool. If you don't need this, use the `master` branch instead.
+
 ## 🎯 About
 
 This is an AutoHotkey v2 script that enables you to record keyboard and mouse macros. 

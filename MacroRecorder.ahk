@@ -52,6 +52,17 @@ Hotkey(LOOP_KEY,   (*) => LoopKeyAction(), "Off")
 Hotkey(TOGGLE_KEY, (*) => ToggleScript())  ; Only toggle hotkey is active
 Hotkey(IDLE_TOGGLE_KEY, (*) => ToggleIdleReplay(), "Off")
 
+StopLoop() {
+  global loopPID
+  if (!loopPID)
+    return false
+  try ProcessClose(loopPID)
+  loopPID := 0
+  ShowTip("LOOP Stopped", "y35", "Red|FF4444")
+  SetTimer(() => ShowTip(), -2000)
+  return true
+}
+
 ShowTip(s := "", pos := "y35", color := "Red|00FFFF") {
   static bak := "", idx := 0, ShowTip := Gui(), RecordingControl
   if (bak = color "," pos "," s)
@@ -84,15 +95,11 @@ ShowTip(s := "", pos := "y35", color := "Red|00FFFF") {
 ;============ Hotkey =============
 
 RecordKeyAction() {
-  global loopPID
   if (Recording) {
     Stop()
     return
   }
-  if (loopPID) {
-    try ProcessClose(loopPID)
-    loopPID := 0
-  }
+  StopLoop()
   #SuspendExempt
   RecordScreen()
 }
@@ -202,13 +209,8 @@ LoopKeyAction() {
   #SuspendExempt
 
   ; If loop is running, stop it
-  if (loopPID) {
-    try ProcessClose(loopPID)
-    loopPID := 0
-    ShowTip("LOOP Stopped", "y35", "Red|FF4444")
-    SetTimer(() => ShowTip(), -2000)
+  if (StopLoop())
     return
-  }
 
   if (Recording || Playing)
     Stop()
@@ -276,14 +278,8 @@ ProcessKeySequences() {
 }
 
 PlayKeyAction() {
-  global loopPID
   #SuspendExempt
-  if (loopPID) {
-    try ProcessClose(loopPID)
-    loopPID := 0
-    ShowTip("LOOP Stopped", "y35", "Red|FF4444")
-    SetTimer(() => ShowTip(), -2000)
-  }
+  StopLoop()
   if (Recording || Playing)
     Stop()
   ahk := A_AhkPath
@@ -308,6 +304,7 @@ PlayKeyAction() {
 
 EditKeyAction() {
   #SuspendExempt
+  StopLoop()
   ; Ensure macro file exists
   if (!FileExist(LogFile)) {
     FileAppend("; Empty macro file created by script\nExitApp()\n", LogFile, "UTF-16")
