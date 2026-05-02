@@ -6,7 +6,7 @@ CoordMode("ToolTip")
 SetTitleMatchMode(2)
 DetectHiddenWindows(true)
 ;-----------------------------------
-;  Macro Recorder v3.1 by Arty McLabin
+;  Macro Recorder v3.7 by Arty McLabin
 ;  Based on v2 by Raeleus (https://github.com/raeleus/AHK-Macro-Recorder). Raeleus based his on v2.1 of FeiYue
 ;
 ;  F1 = Play macro
@@ -224,10 +224,7 @@ LoopKeyAction() {
     Exit()
   }
 
-  ; Ensure macro file exists
-  if (!FileExist(LogFile)) {
-    FileAppend("; Empty macro file created by script`nExitApp()`n", LogFile, "UTF-16")
-  }
+  EnsureEmptyMacroFile()
 
   ReleaseModifiers()
   if (A_IsCompiled) {
@@ -293,10 +290,7 @@ PlayKeyAction() {
     Exit()
   }
 
-  ; Ensure macro file exists
-  if (!FileExist(LogFile)) {
-    FileAppend("; Empty macro file created by script\nExitApp()\n", LogFile, "UTF-16")
-  }
+  EnsureEmptyMacroFile()
 
   ReleaseModifiers()
   if (A_IsCompiled) {
@@ -310,10 +304,7 @@ PlayKeyAction() {
 EditKeyAction() {
   #SuspendExempt
   StopLoop()
-  ; Ensure macro file exists
-  if (!FileExist(LogFile)) {
-    FileAppend("; Empty macro file created by script\nExitApp()\n", LogFile, "UTF-16")
-  }
+  EnsureEmptyMacroFile()
   Run("notepad.exe `"" LogFile "`"")
   return
 }
@@ -339,6 +330,15 @@ ToggleScript() {
 }
 
 ;============ Functions =============
+
+EnsureEmptyMacroFile() {
+  ; Create an empty macro file at LogFile if it doesn't exist yet.
+  ; SSoT for the empty-macro template (was duplicated 3x; AHK2 escape `n, not literal \n).
+  global LogFile
+  if (!FileExist(LogFile)) {
+    FileAppend("; Empty macro file created by script`nExitApp()`n", LogFile, "UTF-16")
+  }
+}
 
 SetHotkey(f := false) {
   f := f ? "On" : "Off"
