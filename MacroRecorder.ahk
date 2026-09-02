@@ -6,28 +6,39 @@ CoordMode("ToolTip")
 SetTitleMatchMode(2)
 DetectHiddenWindows(true)
 ;-----------------------------------
-;  Macro Recorder v3.7 by Arty McLabin
+;  Macro Recorder v3.8 by Arty McLabin
 ;  Based on v2 by Raeleus (https://github.com/raeleus/AHK-Macro-Recorder). Raeleus based his on v2.1 of FeiYue
 ;
-;  F1 = Play macro
-;  F2 = Record macro
-;  F3 = Edit macro in Notepad
-;  F4 = Toggle enable/disable script
-;  F6 = Play macro in a loop (F5 is commonly reserved by other apps, so F6 is the default - customize below)
+;  F1              = Play macro
+;  F2              = Record macro           (legacy: only delays >200ms, halved, commented out)
+;  Shift + F2      = Record macro (TIMED)   (every delay recorded verbatim, active immediately)
+;  Ctrl+Shift+F2   = Record macro (HUMAN)   (TIMED + natural bezier mouse travel on playback)
+;  F3              = Edit macro in Notepad
+;  F4              = Toggle enable/disable script
+;  F6              = Play macro in a loop
 ;
-;  To customize hotkeys, change the values below.
+;  Press the same chord again (or F2) to stop recording.
+;
+;  TIMED / HUMAN recordings emit a `SPEED := 1.0` global at the top of the macro.
+;  Edit it (F3) to scale the whole playback: 0.5 = twice as fast, 2.0 = half speed.
+;  HUMAN recordings force screen coordinates (mouse paths are absolute by nature).
 ;-----------------------------------
 
 DllCall("SetThreadDpiAwarenessContext", "ptr", -3, "ptr")  ; Fix mouse coords on scaled monitors (>100%)
 
-PLAY_KEY   := "F1"   ; Play macro
-RECORD_KEY := "F2"   ; Record macro
-EDIT_KEY   := "F3"   ; Edit macro in Notepad
-TOGGLE_KEY := "F4"   ; Toggle enable/disable script
-scriptEnabled := true  ; Start enabled by default
-LOOP_KEY   := "F6"   ; Play macro indefinitely (F5 is too commonly reserved by other apps)
-LOOP_DELAY := 1000   ; Delay in milliseconds between loops
-loopPID := 0  ; Track loop child process
+PLAY_KEY         := "F1"     ; Play macro
+RECORD_KEY       := "F2"     ; Record macro (legacy behaviour)
+RECORD_TIMED_KEY := "+F2"    ; Record macro, respecting real delays
+RECORD_HUMAN_KEY := "^+F2"   ; Record macro, real delays + human mouse movement
+EDIT_KEY         := "F3"     ; Edit macro in Notepad
+TOGGLE_KEY       := "F4"     ; Toggle enable/disable script
+scriptEnabled    := true     ; Start enabled by default
+LOOP_KEY         := "F6"     ; Play macro indefinitely (F5 is too commonly reserved by other apps)
+LOOP_DELAY       := 1000     ; Delay in milliseconds between loops
+loopPID          := 0        ; Track loop child process
+
+MIN_SLEEP        := 8        ; ms; below A_TickCount resolution, not worth emitting
+RecordMode       := "legacy" ; legacy | timed | human
 
 if (A_Args.Length < 1) {
   A_Args.Push("~Record1.ahk")
@@ -43,11 +54,13 @@ Recording := false
 Playing := false
 ActionKey := A_Args[2]
 
-Hotkey(PLAY_KEY,   (*) => PlayKeyAction())
-Hotkey(RECORD_KEY, (*) => RecordKeyAction())
-Hotkey(EDIT_KEY,   (*) => EditKeyAction())
-Hotkey(LOOP_KEY,   (*) => LoopKeyAction())
-Hotkey(TOGGLE_KEY, (*) => ToggleScript())
+Hotkey(PLAY_KEY,         (*) => PlayKeyAction())
+Hotkey(RECORD_KEY,       (*) => RecordKeyAction("legacy"))
+Hotkey(RECORD_TIMED_KEY, (*) => RecordKeyAction("timed"))
+Hotkey(RECORD_HUMAN_KEY, (*) => RecordKeyAction("human"))
+Hotkey(EDIT_KEY,         (*) => EditKeyAction())
+Hotkey(LOOP_KEY,         (*) => LoopKeyAction())
+Hotkey(TOGGLE_KEY,       (*) => ToggleScript())
 
 ReleaseModifiers() {
   ; Release any physically held modifier keys to prevent them from
@@ -97,13 +110,15 @@ ShowTip(s := "", pos := "y35", color := "Red|00FFFF") {
 
 ;============ Hotkey =============
 
-RecordKeyAction() {
+RecordKeyAction(mode := "legacy") {
+  global RecordMode
   if (Recording) {
     Stop()
     return
   }
   StopLoop()
   #SuspendExempt
+  RecordMode := mode
   RecordScreen()
 }
 
@@ -111,11 +126,29 @@ RecordScreen() {
   global LogArr := []
   global oldid := ""
   global Recording := false
-  global RelativeX, RelativeY
+  global RelativeX, RelativeY, RecordMode, MouseMode
 
   if (Recording || Playing)
     return
   UpdateSettings()
+
+  ; HUMAN playback drives the cursor in absolute screen space.
+  if (RecordMode == "human")
+    MouseMode := "screen"
+
+  ; Paint the indicator BEFORE SetHotkey(1) registers its 254 hotkeys, so it
+  ; appears immediately rather than after the registration loop finishes.
+  ShowTip(RecordMode == "human" ? "RECORDING WITH DELAYS (SIMULATED HUMAN MOVEMENT)"
+        : RecordMode == "timed" ? "RECORDING WITH DELAYS"
+        : "LEGACY RECORDING")
+
+  ; Let go of the trigger chord before we start listening, so the release of
+  ; Shift/Ctrl from +F2 / ^+F2 can never leak into the recording.
+  if (RecordMode != "legacy") {
+    KeyWait("Shift")
+    KeyWait("Ctrl")
+  }
+
   LogArr := []
   oldid := ""
   Log()
@@ -123,27 +156,30 @@ RecordScreen() {
   SetHotkey(1)
   CoordMode("Mouse", "Screen")
   MouseGetPos(&RelativeX, &RelativeY)
-  ShowTip("Recording")
   return
 }
 
 UpdateSettings() {
-  global MouseMode, RecordSleep
+  global MouseMode, RecordSleep, RecordMode, LogFile
+  MouseMode := "screen"
+  RecordSleep := "false"
+
+  ; Parse the settings header by name, not by line position. The v3.7 parser
+  ; did `Loop 3 { ReadLine() }` then read line 4 as MouseMode and line 6 as
+  ; RecordSleep — an off-by-one that consumed the ";MouseMode=" line itself and
+  ; left both settings permanently pinned to their defaults.
   if (FileExist(LogFile)) {
     LogFileObject := FileOpen(LogFile, "r")
-
-    Loop 3 {
-      LogFileObject.ReadLine()
+    Loop 16 {
+      if (LogFileObject.AtEOF)
+        break
+      line := LogFileObject.ReadLine()
+      if (RegExMatch(line, "i)^\s*;\s*MouseMode\s*=\s*(\S*)", &m))
+        MouseMode := m[1]
+      else if (RegExMatch(line, "i)^\s*;\s*RecordSleep\s*=\s*(\S*)", &m))
+        RecordSleep := m[1]
     }
-    MouseMode := RegExReplace(LogFileObject.ReadLine(), ".*=")
-
-    LogFileObject.ReadLine()
-    RecordSleep := RegExReplace(LogFileObject.ReadLine(), ".*=")
-
     LogFileObject.Close()
-  } else {
-    MouseMode := "screen"
-    RecordSleep := "false"
   }
 
   if (MouseMode != "screen" && MouseMode != "window" && MouseMode != "relative")
@@ -151,25 +187,56 @@ UpdateSettings() {
 
   if (RecordSleep != "true" && RecordSleep != "false")
     RecordSleep := "false"
+
+  ; TIMED and HUMAN always emit live Sleep() calls — the setting is never
+  ; consulted, so the behaviour is active the moment you press the hotkey.
+  if (RecordMode != "legacy")
+    RecordSleep := "true"
 }
 
 Stop() {
-  global LogArr, Recording, isPaused
+  global LogArr, Recording, isPaused, RecordMode, MouseMode, RecordSleep, LogFile
+  global ActionKey, LOOP_KEY, LOOP_DELAY
   #SuspendExempt
   if (Recording) {
     if (LogArr.Length > 0) {
       UpdateSettings()
-      
-      ; Process LogArr to consolidate key combinations
-      ProcessKeySequences()
 
-      s := ";#####SETTINGS#####`n;What is the preferred method of recording mouse coordinates (screen,window,relative)`n;MouseMode=" MouseMode "`n;Record sleep between input actions (true,false)`n;RecordSleep=" RecordSleep "`n"
-      
+      ; UpdateSettings() re-reads the previous macro file, which can flip
+      ; MouseMode back to "window" after LogKey_Mouse already emitted the
+      ; screen-coordinate lines uncommented. Re-assert the HUMAN override so
+      ; the CoordMode written into the preamble matches the recorded lines.
+      if (RecordMode == "human")
+        MouseMode := "screen"
+
+      TrimTrailingModifiers()
+
+      ; Consolidate key combinations. Only meaningful in legacy mode;
+      ; TIMED/HUMAN interleave Sleep() lines between the down/key/up triplet,
+      ; which is precisely the timing we are trying to keep.
+      if (RecordMode == "legacy")
+        ProcessKeySequences()
+
+      s := ""
+      if (RecordMode != "legacy")
+        s .= BuildPreamble()
+
+      s .= ";#####SETTINGS#####`n;What is the preferred method of recording mouse coordinates (screen,window,relative)`n;MouseMode=" MouseMode "`n;Record sleep between input actions (true,false)`n;RecordSleep=" RecordSleep "`n;RecordMode=" RecordMode "`n"
+
       s .= "try {`n"
       s .= "isLoop := (A_Args.Has(1) && A_Args[1] == `"loop`")`n"
       s .= "while (isLoop || A_Index == 1)`n{`n`n"
-      
-      s .= "StartingValue := 0`ni := RegRead(`"HKEY_CURRENT_USER\SOFTWARE\`" A_ScriptName, `"i`", StartingValue)`nRegWrite(i + 1, `"REG_DWORD`", `"HKEY_CURRENT_USER\SOFTWARE\`" A_ScriptName, `"i`")`n`nSetKeyDelay(30)`nSendMode(`"Event`")`nSetTitleMatchMode(2)"
+
+      s .= "StartingValue := 0`ni := RegRead(`"HKEY_CURRENT_USER\SOFTWARE\`" A_ScriptName, `"i`", StartingValue)`nRegWrite(i + 1, `"REG_DWORD`", `"HKEY_CURRENT_USER\SOFTWARE\`" A_ScriptName, `"i`")`n`n"
+
+      if (RecordMode == "legacy") {
+        s .= "SetKeyDelay(30)`nSendMode(`"Event`")`nSetTitleMatchMode(2)"
+      } else {
+        ; Timing comes exclusively from the recorded Sleep() calls, so strip the
+        ; implicit 30ms per-key delay instead of stacking it on top of them.
+        ; 25ms press duration keeps the keystrokes physically plausible.
+        s .= "SendMode(`"Event`")`nSetKeyDelay(0, 25)`nSetMouseDelay(-1)`nSetDefaultMouseSpeed(2)`nSetTitleMatchMode(2)"
+      }
 
       if (MouseMode == "window") {
         s .= "`n;CoordMode(`"Mouse`", `"Screen`")`nCoordMode(`"Mouse`", `"Window`")`n"
@@ -179,25 +246,31 @@ Stop() {
 
       For k, v in LogArr
         s .= "    " v "`n"
-      
+
       s .= "    if (isLoop)`n"
       s .= "        Sleep(" LOOP_DELAY ")`n"
-      
+
       s .= "}`n"
       s .= "} finally {`n"
       s .= "  BlockInput(false)`n"
       s .= "}`n"
-      s .= "ExitApp()`n`n" ActionKey "::ExitApp()`n" LOOP_KEY "::ExitApp()"
-      
+      s .= "ExitApp()`n`n" ActionKey "::ExitApp()`n" LOOP_KEY "::ExitApp()`n"
+
+      if (RecordMode == "human")
+        s .= "`n" BuildHumanHelpers()
+
       s := RegExReplace(s, "\R", "`n")
       if (FileExist(LogFile))
         FileDelete(LogFile)
       FileAppend(s, LogFile, "UTF-16")
       s := ""
     }
+    ; Unregister the logging hotkeys before releasing LogArr, and leave it an
+    ; empty Array rather than a String so any thread still unwinding out of a
+    ; KeyWait cannot trip over a missing .Length.
     Recording := 0
-    LogArr := ""
     SetHotkey(0)
+    LogArr := []
   }
 
   ShowTip()
@@ -207,8 +280,14 @@ Stop() {
   return
 }
 
+; Emitted above the settings header so SPEED is in scope for every Sleep() below.
+BuildPreamble() {
+  return "SPEED := 1.0  `; playback rate: 0.5 = 2x faster, 2.0 = half speed`n"
+       . "DllCall(`"SetThreadDpiAwarenessContext`", `"ptr`", -3, `"ptr`")`n"
+}
+
 LoopKeyAction() {
-  global loopPID
+  global loopPID, LogFile
   #SuspendExempt
 
   ; If loop is running, stop it
@@ -238,15 +317,33 @@ LoopKeyAction() {
   return
 }
 
+; Stopping with +F2 / ^+F2 logs the chord's own modifier Down before Stop()
+; runs, and the matching Up never arrives (Log() refuses it once Recording is
+; off). Left in place, playback would press Shift/Ctrl and never release it.
+; Drop unmatched trailing modifier presses, plus the Sleep emitted just ahead
+; of each one so no phantom pause is left dangling at the end of the macro.
+TrimTrailingModifiers() {
+  global LogArr
+  if !(LogArr is Array)
+    return
+  while (LogArr.Length > 0) {
+    if !RegExMatch(LogArr[LogArr.Length], 'i)^Send\("\{(Ctrl|Shift|Alt|LWin|RWin) Down\}"\)$')
+      break
+    LogArr.Pop()
+    if (LogArr.Length > 0 && RegExMatch(LogArr[LogArr.Length], 'i)^;?Sleep\('))
+      LogArr.Pop()
+  }
+}
+
 ; Helper function to process key sequences and consolidate key combinations
 ProcessKeySequences() {
   global LogArr
   newLogArr := []
-  
+
   i := 1
   while (i <= LogArr.Length) {
     currentLine := LogArr[i]
-    
+
     ; Look for patterns like "Send("{Alt Down}")" followed by "Send("{Something}")" and then "Send("{Alt Up}")"
     if (i + 2 <= LogArr.Length) {
       modDown := RegExMatch(currentLine, 'Send\("{([^}]+) Down}"\)')
@@ -254,7 +351,7 @@ ProcessKeySequences() {
         modifier := RegExReplace(currentLine, 'Send\("{([^}]+) Down}"\)', "$1")
         nextLine := LogArr[i + 1]
         upLine := LogArr[i + 2]
-        
+
         ; Check if this is a modifier + key + modifier up pattern
         if (RegExMatch(upLine, 'Send\("{' modifier ' Up}"\)')) {
           ; This is a modifier key combination
@@ -268,17 +365,18 @@ ProcessKeySequences() {
         }
       }
     }
-    
+
     ; Add the current line if it wasn't part of a key combination
     newLogArr.Push(currentLine)
     i++
   }
-  
+
   ; Replace the original LogArr with our processed version
   LogArr := newLogArr
 }
 
 PlayKeyAction() {
+  global LogFile
   #SuspendExempt
   StopLoop()
   if (Recording || Playing)
@@ -302,6 +400,7 @@ PlayKeyAction() {
 }
 
 EditKeyAction() {
+  global LogFile
   #SuspendExempt
   StopLoop()
   EnsureEmptyMacroFile()
@@ -310,20 +409,16 @@ EditKeyAction() {
 }
 
 ToggleScript() {
-    global scriptEnabled, PLAY_KEY, RECORD_KEY, EDIT_KEY
+    global scriptEnabled, PLAY_KEY, RECORD_KEY, EDIT_KEY, LOOP_KEY
+    global RECORD_TIMED_KEY, RECORD_HUMAN_KEY
     scriptEnabled := !scriptEnabled
+    state := scriptEnabled ? "On" : "Off"
+    for k in [PLAY_KEY, RECORD_KEY, RECORD_TIMED_KEY, RECORD_HUMAN_KEY, EDIT_KEY, LOOP_KEY]
+        Hotkey(k, state)
     if scriptEnabled {
-        Hotkey(PLAY_KEY,   "On")
-        Hotkey(RECORD_KEY, "On")
-        Hotkey(EDIT_KEY,   "On")
-        Hotkey(LOOP_KEY,   "On")
         ShowTip("Macro Recorder ENABLED", "y35", "Green|00FF00")
         SetTimer(() => ShowTip(), -500)
     } else {
-        Hotkey(PLAY_KEY,   "Off")
-        Hotkey(RECORD_KEY, "Off")
-        Hotkey(EDIT_KEY,   "Off")
-        Hotkey(LOOP_KEY,   "Off")
         ShowTip("Macro Recorder DISABLED", "y35", "Gray|888888")
         SetTimer(() => ShowTip(), -500)
     }
@@ -363,7 +458,11 @@ SetHotkey(f := false) {
 }
 
 LogKey(HotkeyName) {
+  global Recording, LogArr
   Critical()
+  ; A hotkey thread can already be in flight when Stop() runs.
+  if (!Recording || !(LogArr is Array))
+    return
   k := GetKeyName(vksc := SubStr(A_ThisHotkey, 3))
   k := StrReplace(k, "Control", "Ctrl"), r := SubStr(k, 2)
   if (r ~= "^(?i:Alt|Ctrl|Shift|Win)$")
@@ -394,7 +493,8 @@ LogKey_Control(key) {
   ErrorLevel := !KeyWait(key)
   Critical()
 
-  ; Log the key up event
+  ; Log the key up event. In TIMED/HUMAN mode the elapsed time between these
+  ; two Log() calls becomes a Sleep(), so the real hold duration survives.
   Log("{" k " Up}", 1)
 
   ; Remove the key from pressed keys
@@ -402,23 +502,26 @@ LogKey_Control(key) {
 }
 
 LogKey_Mouse(key) {
-  global LogArr, RelativeX, RelativeY
+  global LogArr, RelativeX, RelativeY, RecordMode, MouseMode, Recording
   k := SubStr(key, 1, 1)
+  ; HumanClick mirrors MouseClick's signature and the trailing-comment widths,
+  ; so the down/up consolidation SubStr() offsets below stay valid for both.
+  fn := (RecordMode == "human") ? "HumanClick" : "MouseClick"
 
   ;screen
   CoordMode("Mouse", "Screen")
   MouseGetPos(&X, &Y, &id)
-  Log((MouseMode == "window" || MouseMode == "relative" ? ";" : "") "MouseClick(`"" k "`", " X ", " Y ",,, `"D`") `;screen")
+  Log((MouseMode == "window" || MouseMode == "relative" ? ";" : "") fn "(`"" k "`", " X ", " Y ",,, `"D`") `;screen")
 
   ;window
   CoordMode("Mouse", "Window")
   MouseGetPos(&WindowX, &WindowY, &id)
-  Log((MouseMode != "window" ? ";" : "") "MouseClick(`"" k "`", " WindowX ", " WindowY ",,, `"D`") `;window")
+  Log((MouseMode != "window" ? ";" : "") fn "(`"" k "`", " WindowX ", " WindowY ",,, `"D`") `;window")
 
   ;relative
   CoordMode("Mouse", "Screen")
   MouseGetPos(&tempRelativeX, &tempRelativeY, &id)
-  Log((MouseMode != "relative" ? ";" : "") "MouseClick(`"" k "`", " (tempRelativeX - RelativeX) ", " (tempRelativeY - RelativeY) ",,, `"D`", `"R`") `;relative")
+  Log((MouseMode != "relative" ? ";" : "") fn "(`"" k "`", " (tempRelativeX - RelativeX) ", " (tempRelativeY - RelativeY) ",,, `"D`", `"R`") `;relative")
   RelativeX := tempRelativeX
   RelativeY := tempRelativeY
 
@@ -435,31 +538,38 @@ LogKey_Mouse(key) {
   else
     MouseGetPos(&X2, &Y2)
 
+  ; Same teardown race as LogKey_Control: recording may have been stopped
+  ; while this thread sat in KeyWait, so LogArr can be gone.
+  if (!Recording || !(LogArr is Array))
+    return
+
   ;log screen
   i := LogArr.Length - 2, r := LogArr[i]
   if (InStr(r, ",,, `"D`")") && Abs(X2 - X1) + Abs(Y2 - Y1) < 5)
     LogArr[i] := SubStr(r, 1, -16) ") `;screen", Log()
   else
-    Log((MouseMode == "window" || MouseMode == "relative" ? ";" : "") "MouseClick(`"" k "`", " (X + X2 - X1) ", " (Y + Y2 - Y1) ",,, `"U`") `;screen")
+    Log((MouseMode == "window" || MouseMode == "relative" ? ";" : "") fn "(`"" k "`", " (X + X2 - X1) ", " (Y + Y2 - Y1) ",,, `"U`") `;screen")
 
   ;log window
   i := LogArr.Length - 1, r := LogArr[i]
   if (InStr(r, ",,, `"D`")") && Abs(X2 - X1) + Abs(Y2 - Y1) < 5)
     LogArr[i] := SubStr(r, 1, -16) ") `;window", Log()
   else
-    Log((MouseMode != "window" ? ";" : "") "MouseClick(`"" k "`", " (WindowX + X2 - X1) ", " (WindowY + Y2 - Y1) ",,, `"U`") `;window")
+    Log((MouseMode != "window" ? ";" : "") fn "(`"" k "`", " (WindowX + X2 - X1) ", " (WindowY + Y2 - Y1) ",,, `"U`") `;window")
 
   ;log relative
   i := LogArr.Length, r := LogArr[i]
   if (InStr(r, ",,, `"D`", `"R`")") && Abs(X2 - X1) + Abs(Y2 - Y1) < 5)
     LogArr[i] := SubStr(r, 1, -23) ",,,, `"R`") `;relative", Log()
   else
-    Log((MouseMode != "relative" ? ";" : "") "MouseClick(`"" k "`", " (X2 - X1) ", " (Y2 - Y1) ",,, `"U`", `"R`") `;relative")
+    Log((MouseMode != "relative" ? ";" : "") fn "(`"" k "`", " (X2 - X1) ", " (Y2 - Y1) ",,, `"U`", `"R`") `;relative")
 }
 
 LogWindow() {
-  global oldid, LogArr, MouseMode
+  global oldid, LogArr, MouseMode, Recording
   static oldtitle
+  if (!Recording || !(LogArr is Array))
+    return
   id := WinExist("A")
   if (!id)
     return
@@ -485,28 +595,50 @@ LogWindow() {
     Log(s)
 }
 
+; Push a Sleep line for `Delay` ms, honouring the active recording mode.
+;   legacy      : only >200ms, halved, and commented out unless RecordSleep=true
+;   timed/human : every delay >= MIN_SLEEP, verbatim, scaled by SPEED at runtime
+EmitSleep(Delay) {
+  global LogArr, RecordSleep, RecordMode, MIN_SLEEP
+  if (RecordMode == "legacy") {
+    if (Delay > 200)
+      LogArr.Push((RecordSleep == "false" ? ";" : "") "Sleep(" (Delay // 2) ")")
+    return
+  }
+  if (Delay >= MIN_SLEEP)
+    LogArr.Push("Sleep(Round(" Delay " * SPEED))")
+}
+
 Log(str := "", Keyboard := false) {
-  global LogArr, RecordSleep
+  global LogArr, RecordSleep, RecordMode, Recording
   static LastTime := 0, KeyboardBuffer := ""
   t := A_TickCount
   Delay := (LastTime ? t - LastTime : 0)
   LastTime := t
   if (str = "")
     return
+  ; LogKey_Control drops Critical and blocks in KeyWait while a modifier is
+  ; held. Stopping with +F2 / ^+F2 runs Stop() during that wait, so the thread
+  ; resumes and logs its "Up" after recording has already ended. Bail out
+  ; instead of pushing onto a torn-down LogArr.
+  if (!Recording || !(LogArr is Array))
+    return
   i := LogArr.Length
   r := i = 0 ? "" : LogArr[i]
-  
+
   if (Keyboard) {
     ; Special handling for modifier keys and key combinations
     if (InStr(str, " Down}") || InStr(str, " Up}")) {
       ; This is a modifier key event, handle it directly
-      if (Delay > 200) 
-        LogArr.Push((RecordSleep == "false" ? ";" : "") "Sleep(" (Delay // 2) ")")
+      EmitSleep(Delay)
       LogArr.Push("Send(`"" . str . "`")")
       return
     }
-    
-    if (InStr(r, "Send") && Delay < 1000 && !InStr(r, " Down}") && !InStr(r, " Up}")) {
+
+    ; Legacy mode coalesces runs of keystrokes into a single Send("{Blind}abc"),
+    ; which throws away the cadence between them. TIMED/HUMAN keep one Send per
+    ; keystroke so each gets its own preceding Sleep.
+    if (RecordMode == "legacy" && InStr(r, "Send") && Delay < 1000 && !InStr(r, " Down}") && !InStr(r, " Up}")) {
       ; Continue normal keyboard sequence for regular keys
       KeyboardBuffer .= str
       ; Update the existing Send command with the complete buffer
@@ -515,8 +647,7 @@ Log(str := "", Keyboard := false) {
       ; Start a new keyboard buffer
       KeyboardBuffer := str
       ; Create a new Send command
-      if (Delay > 200) 
-        LogArr.Push((RecordSleep == "false" ? ";" : "") "Sleep(" (Delay // 2) ")")
+      EmitSleep(Delay)
       LogArr.Push("Send(`"{Blind}" . KeyboardBuffer . "`")")
     }
     return
@@ -524,9 +655,145 @@ Log(str := "", Keyboard := false) {
 
   ; For non-keyboard actions, reset the keyboard buffer
   KeyboardBuffer := ""
-  
-  if (Delay > 200) 
-    LogArr.Push((RecordSleep == "false" ? ";" : "") "Sleep(" (Delay // 2) ")")
+
+  EmitSleep(Delay)
   LogArr.Push(str)
 }
 
+;============ Human mouse movement (injected into HUMAN recordings) =============
+
+BuildHumanHelpers() {
+  ; Single-quoted literals so the embedded double quotes need no escaping.
+  ; Backtick escapes still apply inside single quotes in AHK v2, hence `; below.
+  L := [
+    ';============ HumanMove: natural cursor travel =============',
+    '; Drop-in replacement for MouseClick(). The signature is kept identical so',
+    '; recorded lines can be flipped between MouseClick and HumanClick freely.',
+    'HumanClick(btn, x := "", y := "", clicks := "", speed := "", opts := "", rel := "") {',
+    '    if (x != "" && y != "") {',
+    '        if (rel = "R") {',
+    '            CoordMode("Mouse", "Screen")',
+    '            MouseGetPos(&cx, &cy)',
+    '            HumanMove(cx + x, cy + y)',
+    '        } else {',
+    '            HumanMove(x, y)',
+    '        }',
+    '    }',
+    '    u := StrUpper(opts)',
+    '    n := (clicks = "") ? 1 : clicks',
+    '    if (InStr(u, "D"))',
+    '        Click(btn " Down")',
+    '    else if (InStr(u, "U"))',
+    '        Click(btn " Up")',
+    '    else',
+    '        Click(btn " " n)',
+    '}',
+    '',
+    '; Absolute move through the injected-input path (mouse_event) rather than',
+    '; SetCursorPos, so the motion is visible to apps that read raw input',
+    '; instead of polling the cursor position.',
+    'HumanPos(x, y) {',
+    '    static vx := DllCall("GetSystemMetrics", "int", 76)   `; SM_XVIRTUALSCREEN',
+    '    static vy := DllCall("GetSystemMetrics", "int", 77)   `; SM_YVIRTUALSCREEN',
+    '    static vw := DllCall("GetSystemMetrics", "int", 78)   `; SM_CXVIRTUALSCREEN',
+    '    static vh := DllCall("GetSystemMetrics", "int", 79)   `; SM_CYVIRTUALSCREEN',
+    '    nx := Round((x - vx) * 65535 / (vw - 1))',
+    '    ny := Round((y - vy) * 65535 / (vh - 1))',
+    '    `; MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK',
+    '    DllCall("mouse_event", "uint", 0xC001, "int", nx, "int", ny, "uint", 0, "uptr", 0)',
+    '}',
+    '',
+    '; Windows defaults to a ~15.6ms scheduler tick, which makes Sleep(4) sleep',
+    '; ~15.6ms and stretches a paced move to 2-3x its intended duration. Ask for',
+    '; 1ms resolution once; the OS restores it when this macro process exits.',
+    'HumanTimer() {',
+    '    static init := DllCall("winmm\timeBeginPeriod", "uint", 1)',
+    '    return init',
+    '}',
+    '',
+    '; Monotonic high-resolution clock, in milliseconds.',
+    'HumanNow() {',
+    '    static freq := 0',
+    '    if (!freq)',
+    '        DllCall("QueryPerformanceFrequency", "int64*", &freq)',
+    '    cnt := 0',
+    '    DllCall("QueryPerformanceCounter", "int64*", &cnt)',
+    '    return cnt * 1000.0 / freq',
+    '}',
+    '',
+    '; Cubic bezier path with a randomised perpendicular bow, ease-in-out',
+    '; velocity, per-step jitter, and an overshoot-then-correct on long throws.',
+    '; Duration follows Fitts law: a + b * log2(2D/W + 1).',
+    '; The loop is driven by elapsed wall-clock time rather than a fixed step',
+    '; count, so the total duration stays correct even if Sleep() overshoots.',
+    'HumanMove(tx, ty) {',
+    '    global SPEED',
+    '    HumanTimer()',
+    '    CoordMode("Mouse", "Screen")',
+    '    MouseGetPos(&sx, &sy)',
+    '    dx := tx - sx, dy := ty - sy',
+    '    dist := Sqrt(dx * dx + dy * dy)',
+    '    if (dist < 2) {',
+    '        HumanPos(tx, ty)',
+    '        return',
+    '    }',
+    '',
+    '    `; Tuned so a ~1100px throw lands near 700ms end-to-end (measured), which',
+    '    `; sits in the middle of the human range. Raise b to make travel lazier.',
+    '    dur := (70 + 85 * Log(2 * dist / 12 + 1) / Log(2)) * Random(0.85, 1.2) * SPEED',
+    '',
+    '    px := -dy / dist, py := dx / dist               `; unit normal to the path',
+    '    bow := dist * Random(0.04, 0.14) * (Random(0, 1) ? 1 : -1)',
+    '    c1x := sx + dx * 0.30 + px * bow',
+    '    c1y := sy + dy * 0.30 + py * bow',
+    '    c2x := sx + dx * 0.68 + px * bow * 0.55',
+    '    c2y := sy + dy * 0.68 + py * bow * 0.55',
+    '',
+    '    ox := tx, oy := ty',
+    '    over := (dist > 220)',
+    '    if (over) {',
+    '        om := Random(4.0, 14.0)                     `; aim past the target',
+    '        ox += dx / dist * om, oy += dy / dist * om',
+    '    }',
+    '',
+    '    t0 := HumanNow()',
+    '    Loop 4000 {                                     `; safety cap, not the pacer',
+    '        t := (HumanNow() - t0) / dur',
+    '        if (t >= 1)',
+    '            break',
+    '        e := (t < 0.5) ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2   `; easeInOutCubic',
+    '        u := 1 - e',
+    '        x := u*u*u*sx + 3*u*u*e*c1x + 3*u*e*e*c2x + e*e*e*ox',
+    '        y := u*u*u*sy + 3*u*u*e*c1y + 3*u*e*e*c2y + e*e*e*oy',
+    '        if (t < 0.97 && dist > 40) {',
+    '            x += Random(-1.0, 1.0)',
+    '            y += Random(-1.0, 1.0)',
+    '        }',
+    '        HumanPos(Round(x), Round(y))',
+    '        Sleep(4)                                    `; ~200Hz with 1ms timer res',
+    '    }',
+    '',
+    '    if (over) {',
+    '        Sleep(Round(Random(20, 65) * SPEED))        `; correction latency',
+    '        HumanSettle(ox, oy, tx, ty)',
+    '    }',
+    '    HumanPos(tx, ty)',
+    '    Sleep(Round(Random(15, 55) * SPEED))            `; dwell before the click',
+    '}',
+    '',
+    '; Short decelerating corrective hop from the overshoot point to the target.',
+    'HumanSettle(sx, sy, tx, ty) {',
+    '    n := Random(6, 11)',
+    '    Loop n {',
+    '        t := A_Index / n',
+    '        e := 1 - (1 - t) ** 3                       `; easeOutCubic',
+    '        HumanPos(Round(sx + (tx - sx) * e), Round(sy + (ty - sy) * e))',
+    '        Sleep(Random(5, 11))',
+    '    }',
+    '}'
+  ]
+  out := ""
+  for line in L
+    out .= line "`n"
+  return out
+}
